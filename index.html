@@ -2873,42 +2873,42 @@ async function hOpen(raw){
 // Regras por item da MTBF (em texto normalizado: minúsculo, sem acento).
 const H_RULES = [
   [/particulad|dpf/, 'particulado | dpf'],
-  [/filtro.*oleo|oleo.*filtro/, 'filtro oleo -cambio -caixa -transmissao | elemento oleo'],
-  [/filtro.*(condicionado|cabine|polen)/, 'filtro condicionado | filtro cabine | filtro polen | filtro antipolen | elemento condicionado'],
+  [/filtro.*oleo|oleo.*filtro/, 'filtro oleo -cambio -caixa -transmissao -hidraulico -direcao -diesel -tampa -carcaca | elemento oleo -hidraulico'],
+  [/filtro.*(condicionado|cabine|polen)/, 'filtro condicionado -secador -tampa | filtro cabine | filtro polen | filtro antipolen | filtro anti polen | elemento condicionado'],
   [/filtro.*combust/, 'filtro combustivel | elemento combustivel | filtro diesel | filtro separador'],
-  [/filtro.*\bar\b/, 'filtro ar -condicionado -cabine -polen -antipolen | elemento ar -condicionado'],
+  [/filtro.*\bar\b/, 'filtro ar -condicionado -cabine -polen -antipolen -secador -tampa -carcaca | elemento ar -condicionado'],
   [/oleo.*(marcha|cambio)/, 'oleo cambio | oleo caixa marcha | oleo transmissao | oleo 75w | oleo 80w'],
   [/oleo.*transfer/, 'oleo transferencia'],
   [/oleo.*diferenc/, 'oleo diferencial'],
   [/oleo.*direc/, 'oleo direcao | fluido direcao | oleo atf'],
   [/oleo.*motor/, 'oleo motor -filtro -elemento | oleo lubrificante -filtro -elemento -cambio -diferencial -direcao -transmissao | oleo 0w | oleo 5w | oleo 10w | oleo 15w | oleo 20w'],
-  [/fluido.*freio|oleo.*freio/, 'fluido freio | oleo freio | dot4 | dot 4'],
+  [/fluido.*freio|oleo.*freio/, 'fluido freio -reservatorio -limpeza | oleo freio -filtros -regulagem -reservatorio -giro | dot4 | dot 4'],
   [/aditivo|arrefec/, 'aditivo -combustivel -diesel | liquido arrefecimento'],
   [/pastilha/, 'pastilha'],
-  [/disco.*freio/, 'disco freio | disco -embreagem'],
-  [/sapata/, 'sapata | lona freio'],
+  [/disco.*freio/, 'disco freio -retifica -passe -lixa | disco -embreagem -retifica -passe -lixa -corte'],
+  [/sapata/, 'sapata -regulagem -mola -molas | lona freio'],
   [/tambor/, 'tambor'],
   [/cilindro.*roda/, 'cilindro roda'],
   [/cilindro mestre/, 'cilindro mestre'],
-  [/pinca/, 'pinca'],
+  [/pinca/, 'pinca -clipe -mola -pino -parafuso -coifa'],
   [/regulagem.*freio/, 'regulagem freio'],
   [/cabo.*freio/, 'cabo freio'],
   [/regulador.*freio/, 'regulador freio'],
-  [/correia dentada/, 'correia dentada | kit correia dentada | kit distribuicao | correia sincronizadora'],
-  [/correia/, 'correia -dentada'],
+  [/correia dentada/, 'correia dentada -tensor -rolamento -polia -cobertura | kit correia dentada | kit distribuicao | correia sincronizadora'],
+  [/correia/, 'correia -dentada -kit -polia -tensor -rolamento -bomba'],
   [/corrente.*comando/, 'corrente comando | corrente distribuicao'],
-  [/vela.*aquec/, 'vela aquecedora | vela aquecimento | vela incandescencia'],
-  [/vela/, 'vela -aquecedora -aquecimento -incandescencia'],
+  [/vela.*aquec/, 'vela aquec | vela incandesc'],
+  [/vela/, 'vela -aquec -incandesc -cabo -cachimbo -limpeza | troca vela -aquec'],
   [/bateria/, 'bateria -cabo -borne -terminal -recarga -teste -carga'],
   [/valvula.*pneu/, 'valvula pneu | bico pneu'],
   [/alinhamento/, 'alinhamento'],
-  [/balanceamento/, 'balanceamento'],
+  [/balanceamento/, 'balanceamento -ventilador -cardan -rotor -caminhao'],
   [/cambagem|caster/, 'cambagem | caster | camber'],
-  [/pneu/, 'pneu -valvula -reparo -conserto -montagem -desmontagem -balanceamento -alinhamento -rodizio -calibragem -vulcanizacao'],
+  [/pneu/, 'pneu -valvula -bico -reparo -conserto -montagem -desmontagem -balanceamento -alinhamento -rodizio -calibragem -vulcanizacao -avaria'],
   [/amortecedor/, 'amortecedor'],
-  [/embreagem/, 'embreagem | plato | kit embreagem'],
+  [/embreagem/, 'embreagem -fluido | plato | kit embreagem'],
   [/palheta/, 'palheta'],
-  [/lampada/, 'lampada'],
+  [/lampada/, 'lampada -bandeirola'],
   [/terminal.*direc/, 'terminal direcao'],
   [/caixa.*direc/, 'caixa direcao'],
   [/bomba.*direc/, 'bomba direcao'],
@@ -2921,7 +2921,7 @@ const H_RULES = [
   [/limpeza.*radiador/, 'limpeza radiador'],
   [/mangueira.*radiador/, 'mangueira radiador'],
   [/^radiador/, 'radiador -limpeza -mangueira -aditivo -tampa'],
-  [/bomba.*agua/, 'bomba agua | bomba dagua'],
+  [/bomba.*agua/, 'bomba agua -correia -junta -pipa -rolamento -rotor -carcaca | bomba dagua -correia -junta -pipa -rolamento -rotor -carcaca'],
   [/bomba.*combust/, 'bomba combustivel'],
   [/bomba.*oleo/, 'bomba oleo'],
   [/coxim.*cambio/, 'coxim cambio'],
@@ -3273,7 +3273,7 @@ function histAttach(card){
   let t = null;
   qIn.addEventListener('input', e => { e.stopPropagation(); card.dataset.qUser = qIn.value.trim() ? '1' : ''; clearTimeout(t); t = setTimeout(() => hRefreshCard(card), 300); });
   qIn.addEventListener('change', e => e.stopPropagation());
-  ['.qtd', '.valorUnit', '.tipo', '.diferencaPneu'].forEach(sl => { const el = card.querySelector(sl); if(el){ el.addEventListener('input', () => hCmp(card)); el.addEventListener('change', () => hCmp(card)); } });
+  ['.qtd', '.valorUnit', '.tipo', '.diferencaPneu'].forEach(sl => { const el = card.querySelector(sl); if(el){ el.addEventListener('input', () => setTimeout(() => hCmp(card), 0)); el.addEventListener('change', () => setTimeout(() => hCmp(card), 0)); } });
   card.querySelector('.ultimaTroca').addEventListener('input', e => {
     card.dataset.utMode = e.target.value === '' ? '' : 'manual';
     // escolhida uma OS sem KM na base, o KM digitado continua ligado àquela OS
@@ -3399,26 +3399,32 @@ histBar.addEventListener('click', async e => {
 // cliente à mão, a escolha dele vale e o histórico só avisa se divergir.
 let hCliAuto = false;
 const hCliN = s => hNorm(s).replace(/\bs a\b/g, ' ').replace(/\b(ltda|eireli|epp|me|sa|cia)\b/g, ' ').replace(/\s+/g, ' ').trim();
+// palavras que não identificam a empresa (aparecem em centenas de razões sociais)
+const H_CLI_GEN = new Set('de da do das dos e em engenharia construcoes construcao construtora servicos servico comercio comercial locacao locacoes maquinas equipamentos manutencao empreendimentos mineracao transportes transporte industria industrial industriais consultoria assessoria ambiental ambientais tecnologia solucoes sondagem sondagens geologia florestal florestais agroflorestais participacoes montagens obras grupo brasil filial matriz s/a'.split(' '));
 function hFindCliente(names){
   const idx = CLIENTES.map((c, i) => { const n = hCliN(c.nome); return { i, n, w: new Set(n.split(' ').filter(t => t.length > 1)) }; });
+  const dist = w => new Set([...w].filter(t => !H_CLI_GEN.has(t)));
+  const iguais = (a, b) => a.size === b.size && [...a].every(t => b.has(t));
+  const sug = new Map();
   for(const raw of names){
     const n = hCliN(raw); if(!n) continue;
     const ex = idx.filter(x => x.n === n);
     if(ex.length === 1) return { i: ex[0].i };
     if(ex.length > 1) return { amb: ex.map(x => x.i) };
-    const pre = idx.filter(x => x.n.startsWith(n + ' ') || n.startsWith(x.n + ' '));
-    if(pre.length === 1) return { i: pre[0].i };
-    if(pre.length > 1) return { amb: pre.map(x => x.i) };
+    const w = new Set(n.split(' ').filter(t => t.length > 1)), dw = dist(w);
+    idx.forEach(x => {
+      let k = 0; w.forEach(t => { if(x.w.has(t)) k++; });
+      const j = k / (w.size + x.w.size - k), dx = dist(x.w);
+      // mesmo nome com grafia diferente: as palavras distintivas são as mesmas
+      const forte = dw.size > 0 && iguais(dw, dx);
+      const prefixo = x.n.startsWith(n + ' ') || n.startsWith(x.n + ' ');
+      if(forte || prefixo || j >= 0.5){ const v = { j, forte }; const o = sug.get(x.i); if(!o || j > o.j) sug.set(x.i, v); }
+    });
   }
-  const sc = [];
-  for(const raw of names){
-    const w = new Set(hCliN(raw).split(' ').filter(t => t.length > 1)); if(!w.size) continue;
-    idx.forEach(x => { let k = 0; w.forEach(t => { if(x.w.has(t)) k++; }); const j = k / (w.size + x.w.size - k); sc.push({ i: x.i, j }); });
-  }
-  const best = new Map(); sc.forEach(s => { if(!(best.get(s.i) >= s.j)) best.set(s.i, s.j); });
-  const r = [...best.entries()].sort((a, b) => b[1] - a[1]);
-  if(r.length && r[0][1] >= 0.6 && (r.length < 2 || r[0][1] - r[1][1] >= 0.15)) return { i: r[0][0] };
-  const near = r.filter(x => x[1] >= 0.5).slice(0, 3).map(x => x[0]);
+  const r = [...sug.entries()].sort((a, b) => b[1].j - a[1].j);
+  const fortes = r.filter(x => x[1].forte);
+  if(fortes.length === 1) return { i: fortes[0][0] };
+  const near = (fortes.length ? fortes : r).slice(0, 3).map(x => x[0]);
   return near.length ? { amb: near } : null;
 }
 function hPlacaVeic(placa){
