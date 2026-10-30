@@ -1027,6 +1027,20 @@
   .saved-io{margin-left:auto;display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;}
   body.calc-locked .wrap{filter:blur(7px);pointer-events:none;user-select:none;}
   body.calc-locked .admin-fab{display:none;}
+  /* busca na Referência MTBF */
+  .item-card .mtbf-busca-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;}
+  .item-card input.mtbfBusca{flex:1;min-width:200px;height:32px;font-size:13px;}
+  .mtbfBuscaInfo{font-size:11.5px;color:var(--ink-faint);}
+  .mtbfBuscaInfo.warn{color:var(--warn);}
+  /* trava de KM */
+  .item-card.km-erro{border-top-color:var(--warn);box-shadow:0 0 0 2px var(--warn-bg);}
+  .item-card.km-erro input.ultimaTroca, .item-card.km-erro input.atual{border-color:var(--warn);background:var(--warn-bg);color:var(--warn);}
+  .item-card.km-erro .total-reembolso{color:var(--warn) !important;}
+  .km-erro-msg{margin:0 0 12px;padding:9px 12px;border:1px solid var(--warn);border-left:4px solid var(--warn);border-radius:6px;background:var(--warn-bg);color:var(--warn);font-size:12.5px;line-height:1.5;}
+  .km-erro-msg b{font-weight:700;}
+  .km-erro-msg .km-fix{margin-left:4px;height:24px;padding:0 10px;border:1px solid var(--warn);border-radius:5px;background:var(--surface);color:var(--warn);font-size:11px;font-weight:600;cursor:pointer;}
+  .km-erro-resumo{margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);font-size:13px;font-weight:600;}
+  @media print{ .km-erro-msg, .km-erro-resumo, .mtbf-busca-row{display:none !important;} }
 
   .tabs .central-btn{margin-left:auto;font-family:var(--font-body);font-size:12px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line-strong);border-radius:999px;padding:6px 12px;white-space:nowrap;}
   .tabs .central-btn:hover{color:var(--amber-dark);border-color:var(--amber);}
@@ -1862,6 +1876,7 @@ function addRow(){
     <div class="item-field-grid mtbf-row">
       <div>
         <label>Referência MTBF</label>
+        <div class="mtbf-busca-row no-print"><input type="text" class="mtbfBusca" placeholder="🔎 Procurar peça na MTBF… ex.: pinça, axial, correia" autocomplete="off"><span class="mtbfBuscaInfo"></span></div>
         <select class="mtbfRef"></select>
       </div>
     </div>
@@ -1949,6 +1964,7 @@ function addRow(){
 
   autofillAtual();
   histAttach(card);
+  mtbfBuscaAttach(card);
 
   card.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('input', recalcAll);
@@ -2028,6 +2044,10 @@ function recalcAll(){
     let taxaItem = baseComDiferenca * taxaVal;
     let reembolso = baseComDiferenca * (1 + taxaVal);
     if(!(reembolso > 0)){ reembolso = 0; taxaItem = 0; }
+    // KM atual menor que a última troca (ou sem KM atual): KM rodado inválido -> não cobra
+    const kmErr = (typeof kmErroDoCard === 'function') ? kmErroDoCard(card) : null;
+    if(kmErr){ reembolso = 0; taxaItem = 0; }
+    if(typeof kmErroPinta === 'function') kmErroPinta(card, kmErr);
 
     card.querySelector('.kmRestanteOut').value = kmRestante.toLocaleString('pt-BR', {maximumFractionDigits: 0});
     card.querySelector('.valorPorKmOut').value = valorPorKm.toLocaleString('pt-BR', {minimumFractionDigits: 4, maximumFractionDigits: 4});
@@ -2044,6 +2064,7 @@ function recalcAll(){
   document.getElementById('totalCustoOut').textContent = fmtCurrency(totalCusto);
   document.getElementById('totalTaxaOut').textContent = fmtCurrency(totalTaxa);
   document.getElementById('totalReembolsoOut').textContent = fmtCurrency(totalReembolso);
+  if(typeof kmErrosResumo === 'function') kmErrosResumo();
 }
 
 function revokeAllAttachments(){
@@ -2051,7 +2072,7 @@ function revokeAllAttachments(){
 }
 
 function getItemFields(){
-  return Array.from(itemsBody.querySelectorAll('.item-card input:not([type="file"]):not(.hr-q):not(.hm-f):not(.hm-remc), .item-card select'));
+  return Array.from(itemsBody.querySelectorAll('.item-card input:not([type="file"]):not(.hr-q):not(.hm-f):not(.hm-remc):not(.mtbfBusca), .item-card select'));
 }
 
 let awaitingNewItemConfirm = false;
@@ -2913,6 +2934,7 @@ const H_RULES = [
   [/caixa.*direc/, 'caixa direcao'],
   [/bomba.*direc/, 'bomba direcao'],
   [/bieleta/, 'bieleta'],
+  [/axial/, 'axial -coxim'],
   [/articulac/, 'articulacao | pivo'],
   [/bandeja/, 'bandeja'],
   [/cubo.*roda/, 'cubo roda | cubo -embreagem'],
@@ -3599,6 +3621,112 @@ function hDestravar(){ document.body.classList.remove('calc-locked'); }
     aviso(n + ' cálculo(s) importado(s)' + (pac.salvos.length - n ? ', ' + (pac.salvos.length - n) + ' já existiam' : '') + '.');
   });
 })();
+
+
+// ============================================================================
+// BUSCA NA REFERÊNCIA MTBF — digita parte do nome e a lista só mostra o que bate
+// ============================================================================
+function mtbfBuscaFiltra(select){
+  const card = select.closest('.item-card'); if(!card) return;
+  const inp = card.querySelector('.mtbfBusca'), info = card.querySelector('.mtbfBuscaInfo');
+  if(!inp) return;
+  const words = hNorm(inp.value).split(' ').filter(Boolean);
+  const vis = [];
+  select.querySelectorAll('option').forEach(o => {
+    if(o.value === ''){ o.hidden = false; return; }
+    const ok = !words.length || words.every(w => hNorm(o.textContent).includes(w));
+    o.hidden = !ok; if(ok) vis.push(o);
+  });
+  select.querySelectorAll('optgroup').forEach(g => { g.hidden = ![...g.querySelectorAll('option')].some(o => !o.hidden); });
+  if(info){
+    info.className = 'mtbfBuscaInfo' + (words.length && !vis.length ? ' warn' : '');
+    info.textContent = !words.length ? '' : vis.length ? vis.length + ' item(ns) — abra a lista ou tecle Enter para o 1º' : 'nenhum item da MTBF deste cliente com esse nome';
+  }
+  return vis;
+}
+function mtbfBuscaEscolhe(select, opt){
+  if(!opt || select.value === opt.value) return;
+  select.value = opt.value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+// a lista é refeita quando muda cliente/categoria: reaplica o filtro digitado
+const _buildMtbfOptionsOrig = buildMtbfOptions;
+buildMtbfOptions = function(select){
+  _buildMtbfOptionsOrig(select);
+  const vis = mtbfBuscaFiltra(select) || [];
+  // trocou cliente/categoria, a peça sumiu da seleção mas a busca só tem um resultado: reescolhe
+  const inp = select.closest('.item-card') && select.closest('.item-card').querySelector('.mtbfBusca');
+  if(inp && inp.value.trim() && select.value === '' && vis.length === 1){ select.value = vis[0].value; applyMtbfSelectionToCard(select); }
+};
+function mtbfBuscaAttach(card){
+  const inp = card.querySelector('.mtbfBusca'), sel = card.querySelector('.mtbfRef'); if(!inp || !sel) return;
+  let tAuto = null;
+  inp.addEventListener('input', e => {
+    e.stopPropagation();
+    mtbfBuscaFiltra(sel);
+    // sobrou um único resultado e a pessoa parou de digitar: escolhe (e limpa a busca)
+    clearTimeout(tAuto);
+    tAuto = setTimeout(() => { const vis = mtbfBuscaFiltra(sel) || []; if(inp.value.trim() && vis.length === 1) mtbfBuscaEscolhe(sel, vis[0]); }, 900);
+  });
+  inp.addEventListener('change', e => e.stopPropagation());
+  // escolheu a peça (pela busca ou na lista): limpa o campo de busca e volta a lista completa
+  sel.addEventListener('change', () => { if(inp.value){ inp.value = ''; mtbfBuscaFiltra(sel); } });
+  inp.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if(e.key === 'Enter'){ e.preventDefault(); clearTimeout(tAuto); const vis = mtbfBuscaFiltra(sel) || []; if(vis.length) mtbfBuscaEscolhe(sel, vis[0]); }
+    if(e.key === 'Escape'){ inp.value = ''; mtbfBuscaFiltra(sel); }
+  });
+}
+
+// ============================================================================
+// TRAVA DE KM — sem KM atual (item proporcional) ou KM atual menor que a última
+// troca, o KM rodado fica negativo/inválido e a fórmula cobraria mais que o
+// integral. O item fica em erro, com reembolso zerado, até corrigir o KM.
+// ============================================================================
+function kmErroDoCard(card){
+  const kmDeTroca = parseFloat(card.querySelector('.mtbfVal').value) || 0;
+  const ultima = parseFloat(card.querySelector('.ultimaTroca').value) || 0;
+  const atual = parseFloat(card.querySelector('.atual').value) || 0;
+  const tipo = card.querySelector('.tipo').value;
+  const f = v => Math.round(v).toLocaleString('pt-BR');
+  if(ultima > 0 && atual > 0 && atual < ultima)
+    return { campo: 'km', msg: 'KM atual do veículo (' + f(atual) + ' km) é menor que o KM da última troca (' + f(ultima) + ' km): o KM rodado ficaria negativo. Corrija o KM atual (card 1) ou a última troca.' };
+  if(ultima > 0 && !(atual > 0))
+    return { campo: 'km', msg: 'Informe o KM atual do veículo no card 1 — sem ele o KM rodado não pode ser calculado.' };
+  if(tipo === 'PROPORCIONAL' && kmDeTroca > 0 && !(atual > 0))
+    return { campo: 'km', msg: 'Item proporcional: informe o KM atual do veículo no card 1.' };
+  return null;
+}
+function kmErroPinta(card, err){
+  card.classList.toggle('km-erro', !!err);
+  let box = card.querySelector('.km-erro-msg');
+  if(!err){ if(box) box.remove(); return; }
+  if(!box){
+    box = document.createElement('div'); box.className = 'km-erro-msg';
+    const foot = card.querySelector('.item-card-foot'); foot.parentNode.insertBefore(box, foot);
+  }
+  box.innerHTML = '<b>⚠ Erro de KM — reembolso deste item não calculado.</b> ' + hEsc(err.msg)
+    + ' <button type="button" class="km-fix" data-k="atual">corrigir KM atual</button> <button type="button" class="km-fix" data-k="ultima">corrigir última troca</button>';
+  box.querySelectorAll('.km-fix').forEach(b => b.onclick = () => {
+    const el = b.dataset.k === 'atual' ? kmAtualVeiculoInput : card.querySelector('.ultimaTroca');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => { el.focus(); el.select && el.select(); }, 250);
+  });
+}
+function kmErrosResumo(){
+  const n = itemsBody.querySelectorAll('.item-card.km-erro').length;
+  let el = document.getElementById('kmErroResumo');
+  if(!el){ el = document.createElement('div'); el.id = 'kmErroResumo'; el.className = 'km-erro-resumo'; const sg = document.querySelector('.summary-grid'); sg.parentNode.insertBefore(el, sg.nextSibling); }
+  el.style.display = n ? '' : 'none';
+  el.textContent = n ? '⚠ ' + n + ' item(ns) com erro de KM: o reembolso deles está zerado no total até o KM ser corrigido.' : '';
+  return n;
+}
+// impressão e salvamento não saem com erro de KM
+document.getElementById('printBtn').addEventListener('click', e => {
+  if(kmErrosResumo()){ e.stopImmediatePropagation(); alert('Há item(ns) com erro de KM (KM atual menor que a última troca ou KM atual em branco). Corrija antes de imprimir.'); }
+}, true);
+document.getElementById('saveCalcBtn').addEventListener('click', e => {
+  if(kmErrosResumo() && !confirm('Há item(ns) com erro de KM e reembolso zerado. Salvar assim mesmo?')) e.stopImmediatePropagation();
+}, true);
 
 updateMtbfOrigem();
 for(let i=0;i<3;i++) addRow();
