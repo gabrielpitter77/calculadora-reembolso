@@ -2894,6 +2894,7 @@ async function hOpen(raw){
 // Regras por item da MTBF (em texto normalizado: minúsculo, sem acento).
 const H_RULES = [
   [/particulad|dpf/, 'particulado | dpf'],
+  [/desempen.*roda/, 'desempeno roda | desempenar roda'],
   [/filtro.*oleo|oleo.*filtro/, 'filtro oleo -cambio -caixa -transmissao -hidraulico -direcao -diesel -tampa -carcaca | elemento oleo -hidraulico'],
   [/filtro.*(condicionado|cabine|polen)/, 'filtro condicionado -secador -tampa | filtro cabine | filtro polen | filtro antipolen | filtro anti polen | elemento condicionado'],
   [/filtro.*combust/, 'filtro combustivel | elemento combustivel | filtro diesel | filtro separador'],
