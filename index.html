@@ -1260,6 +1260,7 @@
     <div id="totalTaxaOut" style="display:none"></div>
     <div class="toolbar no-print">
       <button class="action primary" id="printBtn">Imprimir / salvar PDF</button>
+      <button class="action" id="downloadHtmlBtn" type="button" title="Baixa a calculadora completa (com clientes e MTBF atuais) para usar direto do computador">⬇ Baixar calculadora (HTML)</button>
       <button class="action amber" id="saveCalcBtn" type="button">💾 Salvar cálculo</button>
       <button class="action" id="resetAllBtn">Reiniciar tudo</button>
       <span class="save-flash" id="saveFlash" style="display:none"></span>
@@ -3728,6 +3729,53 @@ document.getElementById('printBtn').addEventListener('click', e => {
 document.getElementById('saveCalcBtn').addEventListener('click', e => {
   if(kmErrosResumo() && !confirm('Há item(ns) com erro de KM e reembolso zerado. Salvar assim mesmo?')) e.stopImmediatePropagation();
 }, true);
+
+// ============================================================================
+// BAIXAR A CALCULADORA EM HTML (versão online -> arquivo que roda do computador)
+// Monta no navegador, depois do login, o mesmo arquivo da versão local, com os
+// clientes, taxas e MTBF atuais. Nada disso fica publicado no GitHub.
+// Pela Central: ...calculadora-reembolso/?baixar=1 baixa logo após o login.
+// ============================================================================
+function montarCalculadoraHtml(){
+  let html = ORIGINAL_HTML_TEMPLATE;
+  [['CLIENTES', CLIENTES], ['CLIENT_MTBF_MAP', CLIENT_MTBF_MAP], ['MTBF_ESPECIFICO', MTBF_ESPECIFICO], ['MTBF_PADRAO', MTBF_PADRAO], ['MTBF_ORIGEM_LABELS', MTBF_ORIGEM_LABELS]].forEach(([name, value]) => {
+    const re = new RegExp('const ' + name + ' = ([\\s\\S]*?);\\n');
+    if(!re.test(html)) throw new Error('não achei ' + name + ' no código');
+    html = html.replace(re, () => 'const ' + name + ' = ' + JSON.stringify(value) + ';\n');
+  });
+  let mx = '{"clientes":[]}'; try{ mx = document.getElementById('mxBaseData').textContent; }catch(e){}
+  html = html.replace(/(<script type="application\/json" id="mxBaseData">)[\s\S]*?(<\/script>)/, (m, a, b) => a + mx.replace(/<\/script/gi, '<\\/script') + b);
+  // (textos montados em partes para não serem confundidos com o próprio código)
+  const MX_ON = 'window.mx' + 'Start=start;', MX_OFF = "if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);" + 'else start();';
+  html = html.replace(MX_ON, MX_OFF);
+  html = html.replace(/\n?<meta name="calc-online" content="1">/, '').replace(/\n?<meta name="robots" content="noindex,nofollow">/, '');
+  html = html.replace(/(<html[^>]*?)\sclass="dark"/, '$1');
+  return html;
+}
+function baixarCalculadoraHtml(){
+  if(!CLIENTES.length) throw new Error('os dados ainda não carregaram — entre com o login primeiro');
+  const html = montarCalculadoraHtml();
+  hBaixar('Calculadora_Reembolso_Leves_' + new Date().toISOString().slice(0, 10) + '.html', new Blob([html], { type: 'text/html;charset=utf-8' }));
+}
+(function(){
+  const b = document.getElementById('downloadHtmlBtn'); if(!b) return;
+  if(!CALC_ONLINE){ b.style.display = 'none'; return; }
+  b.addEventListener('click', () => { try{ baixarCalculadoraHtml(); }catch(e){ alert('Não foi possível baixar: ' + e.message); } });
+  // ?baixar=1 (card da Central): baixa assim que os dados chegarem
+  let pedido = false; try{ pedido = new URLSearchParams(location.search).get('baixar') === '1'; }catch(e){}
+  if(pedido){
+    const t = setInterval(() => {
+      if(H.st === 'on' && CLIENTES.length){
+        clearInterval(t);
+        try{ baixarCalculadoraHtml(); }catch(e){ return; }
+        try{ history.replaceState(null, '', location.pathname); }catch(e){}
+        const n = document.createElement('div'); n.className = 'km-erro-resumo'; n.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:9999;background:var(--ok-bg);color:var(--ok-ink);border-color:var(--ok-ink)';
+        n.textContent = '⬇ Calculadora baixada (veja a pasta Downloads). Ela abre direto do computador; o histórico continua pedindo o login.';
+        document.body.appendChild(n); setTimeout(() => n.remove(), 9000);
+      }
+    }, 500);
+  }
+})();
 
 updateMtbfOrigem();
 for(let i=0;i<3;i++) addRow();
