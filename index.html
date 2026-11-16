@@ -1041,6 +1041,19 @@
   .km-erro-msg .km-fix{margin-left:4px;height:24px;padding:0 10px;border:1px solid var(--warn);border-radius:5px;background:var(--surface);color:var(--warn);font-size:11px;font-weight:600;cursor:pointer;}
   .km-erro-resumo{margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);font-size:13px;font-weight:600;}
   @media print{ .km-erro-msg, .km-erro-resumo, .mtbf-busca-row{display:none !important;} }
+  /* aviso de reembolso zerado */
+  .item-card.zero-alerta{border-top-color:var(--amber);box-shadow:0 0 0 2px var(--amber-bg);}
+  .item-card.zero-alerta .total-reembolso{color:var(--amber-dark) !important;}
+  .item-card.zero-pisca{animation:zeroPisca .5s 3;}
+  @keyframes zeroPisca{50%{box-shadow:0 0 0 5px var(--amber);}}
+  .zero-msg{margin:0 0 12px;padding:9px 12px;border:1px solid var(--amber);border-left:4px solid var(--amber);border-radius:6px;background:var(--amber-bg);color:var(--amber-dark);font-size:12.5px;line-height:1.5;}
+  .zero-msg.ok{border-color:var(--line-strong);border-left-color:var(--ok-ink);background:var(--ok-bg);color:var(--ok-ink);}
+  .zero-msg b{font-weight:700;}
+  .zero-btn{margin-left:4px;height:24px;padding:0 10px;border:1px solid currentColor;border-radius:5px;background:var(--surface);color:inherit;font-size:11px;font-weight:600;cursor:pointer;}
+  .zero-resumo{margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--amber-bg);color:var(--amber-dark);border:1px solid var(--amber);font-size:13px;font-weight:600;line-height:1.8;}
+  .zero-ir{margin:0 4px;padding:1px 8px;border:1px solid var(--amber);border-radius:12px;background:var(--surface);color:var(--amber-dark);font-size:12px;font-weight:600;cursor:pointer;}
+  .zero-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);max-width:min(640px,calc(100vw - 32px));padding:12px 16px;border-radius:10px;background:#3A2400;color:#FFE3B0;box-shadow:0 8px 28px rgba(0,0,0,.3);font-size:13px;line-height:1.5;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:9998;}
+  .zero-toast.on{opacity:1;transform:translate(-50%,0);}
 
   .tabs .central-btn{margin-left:auto;font-family:var(--font-body);font-size:12px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line-strong);border-radius:999px;padding:6px 12px;white-space:nowrap;}
   .tabs .central-btn:hover{color:var(--amber-dark);border-color:var(--amber);}
@@ -2049,6 +2062,7 @@ function recalcAll(){
     const kmErr = (typeof kmErroDoCard === 'function') ? kmErroDoCard(card) : null;
     if(kmErr){ reembolso = 0; taxaItem = 0; }
     if(typeof kmErroPinta === 'function') kmErroPinta(card, kmErr);
+    if(typeof zeroPinta === 'function') zeroPinta(card, { qtd, valorUnit, valorTotal, kmDeTroca, ultimaTroca, kmAtual, kmRestante, tipo, reembolso, kmErr, diferencaPneu });
 
     card.querySelector('.kmRestanteOut').value = kmRestante.toLocaleString('pt-BR', {maximumFractionDigits: 0});
     card.querySelector('.valorPorKmOut').value = valorPorKm.toLocaleString('pt-BR', {minimumFractionDigits: 4, maximumFractionDigits: 4});
@@ -2066,6 +2080,7 @@ function recalcAll(){
   document.getElementById('totalTaxaOut').textContent = fmtCurrency(totalTaxa);
   document.getElementById('totalReembolsoOut').textContent = fmtCurrency(totalReembolso);
   if(typeof kmErrosResumo === 'function') kmErrosResumo();
+  if(typeof zeroResumo === 'function') zeroResumo();
 }
 
 function revokeAllAttachments(){
@@ -3722,13 +3737,6 @@ function kmErrosResumo(){
   el.textContent = n ? '⚠ ' + n + ' item(ns) com erro de KM: o reembolso deles está zerado no total até o KM ser corrigido.' : '';
   return n;
 }
-// impressão e salvamento não saem com erro de KM
-document.getElementById('printBtn').addEventListener('click', e => {
-  if(kmErrosResumo()){ e.stopImmediatePropagation(); alert('Há item(ns) com erro de KM (KM atual menor que a última troca ou KM atual em branco). Corrija antes de imprimir.'); }
-}, true);
-document.getElementById('saveCalcBtn').addEventListener('click', e => {
-  if(kmErrosResumo() && !confirm('Há item(ns) com erro de KM e reembolso zerado. Salvar assim mesmo?')) e.stopImmediatePropagation();
-}, true);
 
 // ============================================================================
 // BAIXAR A CALCULADORA EM HTML (versão online -> arquivo que roda do computador)
@@ -3776,6 +3784,121 @@ function baixarCalculadoraHtml(){
     }, 500);
   }
 })();
+
+// ============================================================================
+// AVISO DE REEMBOLSO ZERADO — item preenchido cujo reembolso deu R$ 0,00.
+// Mostra o motivo no item, avisa ao sair do item e ao adicionar outro, e pede
+// confirmação ao salvar/imprimir. Zero legítimo (peça passou do MTBF) pode ser
+// confirmado pelo analista e deixa de ser cobrado como pendência.
+// ============================================================================
+function zeroMotivo(card, v){
+  const temAlgo = card.querySelector('.peca').value.trim() || card.querySelector('.mtbfRef').value || v.valorTotal > 0;
+  if(!temAlgo || v.kmErr || v.reembolso > 0) return null;
+  const f = n => Math.round(n).toLocaleString('pt-BR');
+  if(!(v.valorTotal > 0) && !(v.diferencaPneu > 0))
+    return { k: 'valor', grave: true, msg: 'O valor do item está zerado: informe a quantidade e o valor unitário.' };
+  if(v.tipo === 'PROPORCIONAL' && !(v.kmDeTroca > 0))
+    return { k: 'mtbf', grave: true, msg: 'Item proporcional sem MTBF (KM de troca vazio): selecione a Referência MTBF — sem ela o reembolso fica R$ 0,00. Se o item não tem MTBF, troque o tipo para Integral.' };
+  if(v.tipo === 'PROPORCIONAL' && v.kmDeTroca > 0 && v.kmRestante <= 0){
+    const rodou = v.kmAtual - v.ultimaTroca;
+    return { k: 'vencida', grave: false, msg: 'A peça rodou ' + f(rodou) + ' km desde a última troca, acima do MTBF de ' + f(v.kmDeTroca) + ' km: pelo contrato o reembolso proporcional é zero.'
+      + (v.ultimaTroca > 0 ? ' Confira se a última troca e o MTBF estão certos.' : ' A última troca está em branco, então o cálculo contou o KM total do veículo — se houve troca, informe a última troca.') };
+  }
+  return { k: 'outro', grave: true, msg: 'O reembolso deste item deu R$ 0,00. Confira tipo, MTBF, última troca e valores.' };
+}
+function zeroPinta(card, v){
+  const z = zeroMotivo(card, v);
+  const ok = z && card.dataset.zeroOk === z.k + '|' + Math.round(v.valorTotal * 100);
+  card._zero = z && !ok ? z : null;
+  card.classList.toggle('zero-alerta', !!card._zero);
+  let box = card.querySelector('.zero-msg');
+  if(!z){ if(box) box.remove(); delete card.dataset.zeroOk; return; }
+  if(!box){ box = document.createElement('div'); box.className = 'zero-msg no-print'; const foot = card.querySelector('.item-card-foot'); foot.parentNode.insertBefore(box, foot); }
+  box.classList.toggle('ok', !!ok);
+  box.innerHTML = ok
+    ? '✓ Reembolso zero confirmado pelo analista. <button type="button" class="zero-btn" data-z="desfaz">desfazer</button>'
+    : '<b>⚠ Reembolso zerado.</b> ' + hEsc(z.msg)
+      + (z.k === 'mtbf' ? ' <button type="button" class="zero-btn" data-z="mtbf">escolher MTBF</button>' : '')
+      + (z.k === 'valor' ? ' <button type="button" class="zero-btn" data-z="valor">informar valor</button>' : '')
+      + (!z.grave ? ' <button type="button" class="zero-btn" data-z="ok">o zero está correto</button>' : '');
+  box.querySelectorAll('.zero-btn').forEach(b => b.onclick = () => {
+    const a = b.dataset.z;
+    if(a === 'ok'){ card.dataset.zeroOk = z.k + '|' + Math.round(v.valorTotal * 100); recalcAll(); return; }
+    if(a === 'desfaz'){ delete card.dataset.zeroOk; recalcAll(); return; }
+    const el = a === 'mtbf' ? card.querySelector('.mtbfBusca') : card.querySelector('.valorUnit');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => el.focus(), 250);
+  });
+}
+const zeroItens = () => [...itemsBody.querySelectorAll('.item-card')].filter(c => c._zero).map(c => {
+  const n = c.querySelector('.item-num') ? c.querySelector('.item-num').textContent.trim() : '';
+  return { card: c, nome: 'Item ' + (n || '?') + (c.querySelector('.peca').value.trim() ? ' — ' + c.querySelector('.peca').value.trim() : ''), z: c._zero };
+});
+function zeroResumo(){
+  const l = zeroItens();
+  let el = document.getElementById('zeroResumo');
+  if(!el){ el = document.createElement('div'); el.id = 'zeroResumo'; el.className = 'zero-resumo no-print'; const sg = document.querySelector('.summary-grid'); sg.parentNode.insertBefore(el, sg.nextSibling); }
+  el.style.display = l.length ? '' : 'none';
+  el.innerHTML = l.length ? '⚠ ' + l.length + ' item(ns) com reembolso zerado: ' + l.map(x => '<button type="button" class="zero-ir">' + hEsc(x.nome) + '</button>').join(' ') : '';
+  el.querySelectorAll('.zero-ir').forEach((b, i) => b.onclick = () => { const c = l[i].card; c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('zero-pisca'); setTimeout(() => c.classList.remove('zero-pisca'), 1600); });
+  return l;
+}
+function zeroToast(txt){
+  let t = document.getElementById('zeroToast');
+  if(!t){ t = document.createElement('div'); t.id = 'zeroToast'; t.className = 'zero-toast no-print'; document.body.appendChild(t); }
+  t.innerHTML = txt; t.classList.add('on');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 8000);
+}
+// terminou o item (saiu dele) e ficou zerado: avisa uma vez por motivo
+itemsBody.addEventListener('focusout', e => {
+  const card = e.target.closest && e.target.closest('.item-card'); if(!card) return;
+  if(e.relatedTarget && card.contains(e.relatedTarget)) return;
+  setTimeout(() => {
+    if(!card._zero || !document.body.contains(card)) return;
+    const key = card._zero.k + '|' + card.querySelector('.qtd').value + '|' + card.querySelector('.valorUnit').value;
+    if(card._zeroAvisado === key) return; card._zeroAvisado = key;
+    const n = card.querySelector('.item-num') ? card.querySelector('.item-num').textContent.trim() : '';
+    zeroToast('<b>⚠ Item ' + hEsc(n) + ' ficou com reembolso R$ 0,00.</b> ' + hEsc(card._zero.msg));
+  }, 50);
+});
+// adicionar item com algum zerado: avisa (não impede)
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  const l = zeroItens(); if(l.length) zeroToast('<b>⚠ Antes de seguir:</b> ' + l.map(x => hEsc(x.nome)).join(', ') + (l.length > 1 ? ' estão' : ' está') + ' com reembolso zerado. Confira no aviso do item.');
+}, true);
+
+// ============================================================================
+// CONFERÊNCIA ANTES DE SALVAR OU IMPRIMIR — um aviso só, com tudo que falta:
+//  - erro de KM: impressão bloqueada; salvar só confirmando
+//  - reembolso zerado: salvar/imprimir só confirmando
+// Ctrl+P / Cmd+P passa pela mesma conferência (vai pelo botão Imprimir).
+// ============================================================================
+function pendenciasDoCalculo(){
+  const nomeDe = c => { const n = c.querySelector('.item-num') ? c.querySelector('.item-num').textContent.trim() : '?'; const p = c.querySelector('.peca').value.trim(); return 'Item ' + n + (p ? ' — ' + p : ''); };
+  recalcAll();
+  const km = [...itemsBody.querySelectorAll('.item-card.km-erro')].map(c => { const m = c.querySelector('.km-erro-msg'); return { card: c, nome: nomeDe(c), msg: m ? m.textContent.replace('⚠ Erro de KM — reembolso deste item não calculado.', '').replace(/corrigir KM atual|corrigir última troca/g, '').trim() : 'erro de KM' }; });
+  const zero = zeroItens().map(x => ({ card: x.card, nome: x.nome, msg: x.z.msg }));
+  return { km, zero };
+}
+function textoPendencias(p){
+  let t = '';
+  if(p.km.length) t += '⛔ ERRO DE KM (' + p.km.length + '):\n' + p.km.map(x => '• ' + x.nome + '\n   ' + x.msg).join('\n') + '\n\n';
+  if(p.zero.length) t += '⚠ REEMBOLSO ZERADO (' + p.zero.length + '):\n' + p.zero.map(x => '• ' + x.nome + '\n   ' + x.msg).join('\n') + '\n\n';
+  return t;
+}
+function irParaPendencia(p){ const c = (p.km[0] || p.zero[0] || {}).card; if(c){ c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('zero-pisca'); setTimeout(() => c.classList.remove('zero-pisca'), 1600); } }
+document.getElementById('printBtn').addEventListener('click', e => {
+  const p = pendenciasDoCalculo(); if(!p.km.length && !p.zero.length) return;
+  if(p.km.length){ e.stopImmediatePropagation(); alert('Não dá para imprimir: corrija o KM antes.\n\n' + textoPendencias(p)); irParaPendencia(p); return; }
+  if(!confirm('Confira antes de imprimir:\n\n' + textoPendencias(p) + 'Imprimir assim mesmo?')){ e.stopImmediatePropagation(); irParaPendencia(p); }
+}, true);
+document.getElementById('saveCalcBtn').addEventListener('click', e => {
+  const p = pendenciasDoCalculo(); if(!p.km.length && !p.zero.length) return;
+  if(!confirm('Confira antes de salvar:\n\n' + textoPendencias(p) + 'Salvar assim mesmo?')){ e.stopImmediatePropagation(); irParaPendencia(p); }
+}, true);
+document.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P')){
+    e.preventDefault(); document.getElementById('printBtn').click();
+  }
+}, true);
 
 updateMtbfOrigem();
 for(let i=0;i<3;i++) addRow();
