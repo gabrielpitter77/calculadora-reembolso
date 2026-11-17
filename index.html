@@ -3900,6 +3900,19 @@ document.addEventListener('keydown', e => {
   }
 }, true);
 
+// ============================================================================
+// KM DE PNEU PELO CADASTRO — para clientes marcados com "pneuMtbf" no cadastro
+// (dados.enc), o item "Pneus" usa o KM pneu do próprio cadastro em vez do MTBF
+// da tabela. Clientes sem a marcação continuam com o valor da tabela.
+// ============================================================================
+const _getActiveMtbfItemsOrig = getActiveMtbfItems;
+getActiveMtbfItems = function(){
+  const items = _getActiveMtbfItemsOrig();
+  const idx = clienteSelect.value; const c = idx === '' ? null : CLIENTES[idx];
+  if(!c || !c.pneuMtbf || !(c.pneuKm > 0)) return items;
+  return items.map(it => /^(★\s*)?pneus$/i.test(String(it.desc).trim()) ? Object.assign({}, it, { km: c.pneuKm, doCadastro: true }) : it);
+};
+
 updateMtbfOrigem();
 for(let i=0;i<3;i++) addRow();
 </script></body></html>
